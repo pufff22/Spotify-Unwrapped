@@ -363,5 +363,126 @@ with tab2:
 
 # ── Tab 3: Listening DNA ───────────────────────────────────
 with tab3:
-    st.markdown("#### Listening DNA")
-    st.info("Coming Day 6 — your unique sound signature as a radar chart.")
+
+    # ── Calculate scores ───────────────────────────────────
+    freshness  = round((df["release_year"] >= 2023).sum() / len(df) * 100, 1)
+    top_count  = df["primary_artist"].value_counts().iloc[0]
+    loyalty    = round((top_count / len(df)) * 100, 1)
+    diversity  = round((df["primary_artist"].nunique() / len(df)) * 100, 1)
+    avg_dur    = df["duration_mins"].mean()
+    brevity    = round(max(0, min(100, (5 - avg_dur) / (5 - 1.5) * 100)), 1)
+    clean      = round((1 - df["explicit"].mean()) * 100, 1)
+
+    dimensions = ["Freshness", "Loyalty", "Diversity", "Brevity", "Clean"]
+    scores     = [freshness, loyalty, diversity, brevity, clean]
+    dimensions_closed = dimensions + [dimensions[0]]
+    scores_closed     = scores + [scores[0]]
+
+    score_dict  = dict(zip(dimensions, scores))
+    dominant    = max(score_dict, key=score_dict.get)
+    labels = {
+        "Freshness": "The Trendsetter",
+        "Loyalty":   "The Devoted Fan",
+        "Diversity": "The Explorer",
+        "Brevity":   "The Snappy Listener",
+        "Clean":     "The Pure Soul",
+    }
+    personality = labels[dominant]
+
+    # ── Personality header ─────────────────────────────────
+    st.markdown(f"#### Your Music Fingerprint")
+    
+    p1, p2, p3, p4, p5 = st.columns(5)
+    with p1:
+        st.metric("Freshness", f"{freshness}", "Current music")
+    with p2:
+        st.metric("Loyalty", f"{loyalty}", "Artist devotion")
+    with p3:
+        st.metric("Diversity", f"{diversity}", "Artist variety")
+    with p4:
+        st.metric("Brevity", f"{brevity}", "Song length score")
+    with p5:
+        st.metric("Clean", f"{clean}", "Explicit-free")
+
+    st.divider()
+
+    # ── Radar chart + personality card ─────────────────────
+    col_radar, col_card = st.columns([2, 1])
+
+    with col_radar:
+        fig_radar = go.Figure()
+
+        for level in [25, 50, 75, 100]:
+            fig_radar.add_trace(go.Scatterpolar(
+                r=[level] * len(dimensions_closed),
+                theta=dimensions_closed,
+                mode="lines",
+                line=dict(color="#eeeeee", width=1),
+                showlegend=False,
+                hoverinfo="skip",
+            ))
+
+        fig_radar.add_trace(go.Scatterpolar(
+            r=scores_closed,
+            theta=dimensions_closed,
+            fill="toself",
+            fillcolor="rgba(29,185,84,0.15)",
+            line=dict(color="#1DB954", width=2.5),
+            mode="lines+markers",
+            marker=dict(color="#1DB954", size=8),
+            name="Your DNA",
+            hovertemplate="<b>%{theta}</b><br>Score: %{r}<extra></extra>",
+        ))
+
+        fig_radar.update_layout(
+            polar=dict(
+                bgcolor="rgba(0,0,0,0)",
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 100],
+                    tickfont=dict(size=10, color="#888888"),
+                    gridcolor="#f0f0f0",
+                    linecolor="#eeeeee",
+                ),
+                angularaxis=dict(
+                    tickfont=dict(size=13, color="#1a1a1a", family="Inter"),
+                    linecolor="#eeeeee",
+                    gridcolor="#f0f0f0",
+                ),
+            ),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter", color="#1a1a1a"),
+            showlegend=False,
+            height=480,
+            margin=dict(t=40, b=40, l=60, r=60),
+        )
+        st.plotly_chart(fig_radar, use_container_width=True)
+
+    with col_card:
+        st.markdown(f"""
+            <div style='
+                background: #ffffff;
+                border: 1px solid #eeeeee;
+                border-radius: 20px;
+                padding: 2rem 1.5rem;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                text-align: center;
+                margin-top: 1rem;
+            '>
+                <div style='font-size:48px; margin-bottom:1rem;'>🎭</div>
+                <div style='font-size:11px; font-weight:600; color:#1DB954;
+                text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;'>
+                Your Music Personality
+                </div>
+                <div style='font-size:26px; font-weight:700; color:#1a1a1a;
+                letter-spacing:-0.02em; margin-bottom:1rem;'>
+                {personality}
+                </div>
+                <div style='font-size:13px; color:#888; line-height:1.6;'>
+                Your highest score is <b style='color:#1a1a1a;'>{dominant}</b> at 
+                <b style='color:#1DB954;'>{scores[dimensions.index(dominant)]}</b> — 
+                this defines your unique listening fingerprint.
+                </div>
+            </div>
+        """, unsafe_allow_html=True)

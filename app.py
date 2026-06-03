@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import os
 
 # ── Page config ────────────────────────────────────────────
 st.set_page_config(
@@ -114,7 +115,11 @@ CHART_THEME = dict(
     margin=dict(t=20, b=20, l=10, r=10),
 )
 
-# ── Header ─────────────────────────────────────────────────
+GREEN_PALETTE = [
+    "#1DB954", "#168d3e", "#4cd97b",
+    "#a8dfc3", "#d4edda", "#0a5c2a", "#83c9a0"
+]
+
 # ── Header ─────────────────────────────────────────────────
 col_hero, col_stats = st.columns([3, 1])
 
@@ -167,7 +172,7 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Top Artist", top_artist, f"{top_artist_count} of your top 50")
 with col2:
-    st.metric("Unique Artists", total_artists, f"across all 50 tracks")
+    st.metric("Unique Artists", total_artists, "across all 50 tracks")
 with col3:
     st.metric("Avg Song Length", f"{avg_duration} mins", "you like it short")
 with col4:
@@ -176,7 +181,7 @@ with col4:
 st.divider()
 
 # ── Tabs ───────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["Overview", "Taste DNA", "Listening DNA"])
+tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Taste DNA", "Listening DNA", "Genre Evolution"])
 
 # ── Tab 1: Overview ────────────────────────────────────────
 with tab1:
@@ -261,7 +266,6 @@ with tab2:
     explicit_pct = round((df["explicit"].sum() / len(df)) * 100, 1)
     loyalty_score = round((top_artist_count / len(df)) * 100, 1)
 
-    # ── Personality summary cards ──────────────────────────
     st.markdown("#### Your Music Personality")
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -273,7 +277,6 @@ with tab2:
 
     st.divider()
 
-    # ── Row 1: Artist loyalty + Era ────────────────────────
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -319,7 +322,6 @@ with tab2:
         fig_b.update_traces(marker_line_width=0)
         st.plotly_chart(fig_b, use_container_width=True)
 
-    # ── Row 2: Donuts + Duration ───────────────────────────
     col_c, col_d, col_e = st.columns(3)
 
     with col_c:
@@ -390,7 +392,6 @@ with tab2:
 # ── Tab 3: Listening DNA ───────────────────────────────────
 with tab3:
 
-    # ── Calculate scores ───────────────────────────────────
     freshness  = round((df["release_year"] >= 2023).sum() / len(df) * 100, 1)
     top_count  = df["primary_artist"].value_counts().iloc[0]
     loyalty    = round((top_count / len(df)) * 100, 1)
@@ -415,9 +416,7 @@ with tab3:
     }
     personality = labels[dominant]
 
-    # ── Personality header ─────────────────────────────────
-    st.markdown(f"#### Your Music Fingerprint")
-    
+    st.markdown("#### Your Music Fingerprint")
     p1, p2, p3, p4, p5 = st.columns(5)
     with p1:
         st.metric("Freshness", f"{freshness}", "Current music")
@@ -432,7 +431,6 @@ with tab3:
 
     st.divider()
 
-    # ── Radar chart + personality card ─────────────────────
     col_radar, col_card = st.columns([2, 1])
 
     with col_radar:
@@ -506,9 +504,108 @@ with tab3:
                 {personality}
                 </div>
                 <div style='font-size:13px; color:#888; line-height:1.6;'>
-                Your highest score is <b style='color:#1a1a1a;'>{dominant}</b> at 
-                <b style='color:#1DB954;'>{scores[dimensions.index(dominant)]}</b> — 
+                Your highest score is <b style='color:#1a1a1a;'>{dominant}</b> at
+                <b style='color:#1DB954;'>{scores[dimensions.index(dominant)]}</b> —
                 this defines your unique listening fingerprint.
                 </div>
             </div>
         """, unsafe_allow_html=True)
+
+# ── Tab 4: Genre Evolution ─────────────────────────────────
+with tab4:
+    if not os.path.exists("tracks_with_genres.csv"):
+        st.info("Run genre_evolution.py first to generate genre data.")
+    else:
+        gdf = pd.read_csv("tracks_with_genres.csv")
+
+        top_genre = gdf["genre_bucket"].value_counts().index[0]
+        top_genre_pct = round(
+            gdf["genre_bucket"].value_counts().iloc[0] / len(gdf) * 100, 1
+        )
+
+        st.markdown("#### Your Genre Identity")
+        g1, g2, g3 = st.columns(3)
+        with g1:
+            st.metric("Dominant Genre", top_genre, f"{top_genre_pct}% of your top 50")
+        with g2:
+            st.metric("Total Genres", gdf["genre_bucket"].nunique(), "across your library")
+        with g3:
+            dominant_year = gdf[gdf["genre_bucket"] == top_genre]["release_year"].max()
+            st.metric("Most Recent", str(int(dominant_year)), f"latest {top_genre} track year")
+
+        st.divider()
+
+        col_a, col_b = st.columns([1, 2])
+
+        with col_a:
+            st.markdown("#### Your Genre Mix")
+            genre_counts = gdf["genre_bucket"].value_counts().reset_index()
+            genre_counts.columns = ["genre", "count"]
+
+            fig_g1 = go.Figure(data=[go.Pie(
+                labels=genre_counts["genre"],
+                values=genre_counts["count"],
+                hole=0.6,
+                marker_colors=GREEN_PALETTE[:len(genre_counts)],
+                textinfo="percent",
+                textposition="inside",
+            )])
+            fig_g1.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Inter", color="#1a1a1a"),
+                height=420,
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="middle",
+                    y=0.5,
+                    xanchor="left",
+                    x=1.05,
+                    font=dict(size=12)
+                ),
+                margin=dict(t=20, b=20, l=20, r=120),
+                annotations=[dict(
+                    text="50<br>Tracks",
+                    x=0.5, y=0.5,
+                    font_size=14,
+                    showarrow=False,
+                    font_color="#1a1a1a"
+                )]
+            )
+            st.plotly_chart(fig_g1, use_container_width=True)
+
+        with col_b:
+            st.markdown("#### How Your Taste Evolved")
+            genre_year = pd.crosstab(
+                gdf["release_year"], gdf["genre_bucket"]
+            ).reset_index()
+            genre_year_melted = genre_year.melt(
+                id_vars="release_year",
+                var_name="genre",
+                value_name="count"
+            )
+
+            fig_g2 = px.bar(
+                genre_year_melted,
+                x="release_year",
+                y="count",
+                color="genre",
+                labels={"count": "Tracks", "release_year": "Year", "genre": "Genre"},
+                color_discrete_sequence=GREEN_PALETTE,
+            )
+            fig_g2.update_layout(
+                **CHART_THEME,
+                height=380,
+                xaxis=dict(tickmode="linear", gridcolor="#f0f0f0"),
+                yaxis=dict(gridcolor="#f0f0f0"),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="left",
+                    x=0
+                )
+            )
+            fig_g2.update_traces(marker_line_width=0)
+            st.plotly_chart(fig_g2, use_container_width=True)

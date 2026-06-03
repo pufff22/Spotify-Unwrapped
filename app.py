@@ -115,17 +115,43 @@ CHART_THEME = dict(
 )
 
 # ── Header ─────────────────────────────────────────────────
-st.markdown("""
-    <div style='margin-bottom: 0.5rem;'>
-        <span style='font-size:13px; font-weight:500; color:#1DB954;
-        background:#f0faf3; padding:4px 12px; border-radius:20px;'>
-        Your Music Report
-        </span>
-    </div>
-""", unsafe_allow_html=True)
+# ── Header ─────────────────────────────────────────────────
+col_hero, col_stats = st.columns([3, 1])
 
-st.markdown("<h1 style='font-size:2.2rem; font-weight:700; letter-spacing:-0.03em; margin-bottom:0.2rem;'>Your Spotify Unwrapped</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#888; font-size:15px; margin-bottom:1.5rem;'>Deeper than Wrapped. Built from your actual listening data.</p>", unsafe_allow_html=True)
+with col_hero:
+    st.markdown("""
+        <div style='margin-bottom: 0.5rem;'>
+            <span style='font-size:13px; font-weight:500; color:#1DB954;
+            background:#f0faf3; padding:4px 12px; border-radius:20px;'>
+            Your Music Report
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:2.8rem; font-weight:700; letter-spacing:-0.03em; margin-bottom:0.4rem; line-height:1.1;'>Your Spotify<br>Unwrapped</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#888; font-size:16px; margin-bottom:0; max-width:480px;'>Deeper than Wrapped. A personal analytics report built from your actual listening data — not just what Spotify wants you to see.</p>", unsafe_allow_html=True)
+
+with col_stats:
+    st.markdown("""
+        <div style='
+            background:#ffffff;
+            border:1px solid #eeeeee;
+            border-radius:20px;
+            padding:1.5rem;
+            box-shadow:0 2px 8px rgba(0,0,0,0.04);
+            text-align:center;
+            margin-top:0.5rem;
+        '>
+            <div style='font-size:11px;font-weight:600;color:#1DB954;
+            text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.8rem;'>
+            Built with
+            </div>
+            <div style='font-size:14px;color:#1a1a1a;line-height:2;'>
+            Spotify API<br>
+            Python + Pandas<br>
+            Plotly + Streamlit
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 st.divider()
 
@@ -139,13 +165,13 @@ total_artists = df["primary_artist"].nunique()
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("Top Artist", top_artist, f"{top_artist_count} of your top 50 tracks")
+    st.metric("Top Artist", top_artist, f"{top_artist_count} of your top 50")
 with col2:
-    st.metric("Unique Artists", total_artists, "across 50 tracks")
+    st.metric("Unique Artists", total_artists, f"across all 50 tracks")
 with col3:
-    st.metric("Avg Song Length", f"{avg_duration} mins", "across all tracks")
+    st.metric("Avg Song Length", f"{avg_duration} mins", "you like it short")
 with col4:
-    st.metric("Year Range", f"{oldest_year} – {newest_year}", "of your music taste")
+    st.metric("Year Range", f"{oldest_year} – {newest_year}", "your musical timeline")
 
 st.divider()
 

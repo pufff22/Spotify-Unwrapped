@@ -200,28 +200,13 @@ def show_login():
         </div>
     """, unsafe_allow_html=True)
 
+    auth_manager = get_auth_manager(st.secrets["SPOTIPY_REDIRECT_URI"])
+    auth_url = auth_manager.get_authorize_url()
+
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        auth_manager = get_auth_manager(st.secrets["SPOTIPY_REDIRECT_URI"])
-        auth_url = auth_manager.get_authorize_url()
-        st.markdown(f"""
-            <a href="{auth_url}" target="_self">
-                <div style='
-                    background:#1DB954;
-                    color:white;
-                    padding:0.8rem 2rem;
-                    border-radius:50px;
-                    font-weight:600;
-                    font-size:15px;
-                    text-align:center;
-                    cursor:pointer;
-                    font-family:Inter,sans-serif;
-                '>
-                Connect Spotify
-                </div>
-            </a>
-        """, unsafe_allow_html=True)
-
+        st.link_button("Connect Spotify", auth_url, use_container_width=True)
+        
 # ── Main dashboard ─────────────────────────────────────────
 def show_dashboard(df, user_name):
 

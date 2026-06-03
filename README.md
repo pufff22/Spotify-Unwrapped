@@ -51,17 +51,19 @@ Built in 2 weeks as a data analytics portfolio project — combining Spotify API
 
 ## Project Structure
 
+```
 spotify-unwrapped/
-├── app.py                          # Main Streamlit app
-├── spotify_auth.py                 # Spotify OAuth + top tracks fetch
-├── data_cleaner.py                 # Raw JSON → clean DataFrame
-├── taste_dna.py                    # Taste DNA score calculations
-├── listening_dna.py                # Listening DNA radar scores
-├── radar_chart.py                  # Radar chart prototype
-├── tracks_clean.csv                # Cleaned track data
-├── taste_dna_summary.csv           # DNA scores summary
-├── .streamlit/config.toml          # Streamlit theme config
+├── app.py                      # Main Streamlit app
+├── spotify_auth.py             # Spotify OAuth + top tracks fetch
+├── data_cleaner.py             # Raw JSON → clean DataFrame
+├── taste_dna.py                # Taste DNA score calculations
+├── listening_dna.py            # Listening DNA radar scores
+├── radar_chart.py              # Radar chart prototype
+├── tracks_clean.csv            # Cleaned track data
+├── taste_dna_summary.csv       # DNA scores summary
+├── .streamlit/config.toml      # Streamlit theme config
 └── README.md
+```
 
 ---
 

@@ -154,7 +154,7 @@ def fetch_genres(track_data_hash, primary_artists_tuple):
                 artist_genres[name] = [t["name"] for t in sorted_tags]
             else:
                 artist_genres[name] = []
-            time.sleep(1.1)
+            time.sleep(0.5)
         except:
             artist_genres[name] = []
 
@@ -579,10 +579,14 @@ def main():
         df = fetch_top_tracks(access_token)
 
     # Fetch genres with loading message
-    with st.spinner("Analysing your genre DNA — this takes about 30 seconds..."):
-        unique_artists = tuple(df["primary_artist"].unique())
-        genre_map = fetch_genres(access_token, unique_artists)
-        df["genre_bucket"] = df["primary_artist"].map(genre_map)
+    # Fetch genres lazily — don't block dashboard load
+    unique_artists = tuple(df["primary_artist"].unique())
+    try:
+        with st.spinner("Loading genre data..."):
+            genre_map = fetch_genres(access_token, unique_artists)
+            df["genre_bucket"] = df["primary_artist"].map(genre_map)
+    except Exception:
+        df["genre_bucket"] = "Other"
 
     # Logout button
     with st.sidebar:

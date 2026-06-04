@@ -132,7 +132,7 @@ def fetch_top_tracks(access_token):
             "spotify_url":    track["external_urls"]["spotify"],
         })
     df = pd.DataFrame(rows)
-    df["release_year"] = pd.to_datetime(df["release_date"]).dt.year
+    df["release_year"] = pd.to_datetime(df["release_date"], format="mixed", dayfirst=False).dt.year
     return df
 
 @st.cache_data(show_spinner=False)
@@ -206,7 +206,7 @@ def show_login():
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
         st.link_button("Connect Spotify", auth_url, use_container_width=True)
-        
+
 # ── Main dashboard ─────────────────────────────────────────
 def show_dashboard(df, user_name):
 

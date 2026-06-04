@@ -321,11 +321,28 @@ def show_upload_landing():
             label_visibility="collapsed"
         )
         st.markdown("""
-            <p style='color:#aaa; font-size:12px; text-align:center; margin-top:0.5rem;'>
-            How to get your file: <b>Spotify app → Settings → Account → Privacy →
-            Download your data</b> → you'll receive an email with a zip.
-            Open it and upload any <code>StreamingHistory*.json</code> file.
-            </p>
+            <div style='background:#f9f9f7; border:1px solid #eeeeee; border-radius:12px;
+            padding:1rem 1.2rem; margin-top:0.8rem; font-size:12px; color:#555; line-height:1.8;'>
+                <b style='color:#1a1a1a;'>How to get your StreamingHistory.json</b><br><br>
+                <b>💻 On laptop / desktop:</b><br>
+                1. Go to <a href='https://www.spotify.com/account/privacy/' target='_blank'
+                style='color:#1DB954;'>www.spotify.com/account/privacy</a> and log in
+                &nbsp;<span style='color:#aaa'>(note: <code>open.spotify.com</code> won't work — must be <code>www.spotify.com</code>)</span><br>
+                2. Scroll down to <b>"Download your data"</b><br>
+                3. Tick <b>"Extended streaming history"</b> → click <b>Request data</b><br>
+                4. Spotify emails you a confirmation link — click it<br>
+                5. You'll get a second email with a download link (usually within a few hours)<br>
+                6. Download the zip → unzip → upload any <code>StreamingHistory_music_*.json</code> file here<br><br>
+                <b>📱 On phone:</b><br>
+                1. Open Safari or Chrome (not the Spotify app) and go to
+                <a href='https://www.spotify.com/account/privacy/' target='_blank'
+                style='color:#1DB954;'>www.spotify.com/account/privacy</a><br>
+                2. Log in with your Spotify credentials<br>
+                3. Follow steps 2–6 above — the download link comes to your email<br>
+                4. Open the email, download and unzip, then upload the JSON here<br><br>
+                <span style='color:#aaa;'>⏱ Usually arrives within a few hours. The zip will contain files named
+                <code>StreamingHistory_music_0.json</code>, <code>_1.json</code> etc — upload any one of them.</span>
+            </div>
         """, unsafe_allow_html=True)
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)

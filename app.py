@@ -535,26 +535,30 @@ def show_dashboard(df, user_name):
 def main():
     query_params = st.query_params
 
-    # Check if returning from Spotify auth
     if "code" in query_params:
         code = query_params["code"]
         auth_manager = get_auth_manager(st.secrets["SPOTIPY_REDIRECT_URI"])
 
         try:
             token_info = auth_manager.get_access_token(code, as_dict=True)
-            st.session_state["token_info"] = token_info
-            st.query_params.clear()
-            st.rerun()
+            if token_info:
+                st.session_state["token_info"] = token_info
+                st.session_state["authenticated"] = True
+                st.query_params.clear()
+                st.rerun()
+            else:
+                st.error("Failed to get token. Please try again.")
+                show_login()
         except Exception as e:
             st.error(f"Authentication failed: {e}")
             show_login()
         return
 
     # Check if already logged in
-    if "token_info" not in st.session_state:
+    if "token_info" not in st.session_state or not st.session_state.get("authenticated"):
         show_login()
         return
-
+    
     # Fetch data
     token_info = st.session_state["token_info"]
     access_token = token_info["access_token"]

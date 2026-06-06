@@ -4,8 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import time
+import json
+import hashlib
 
-# spotipy kept for future API mode — not used in current upload flow
 try:
     import spotipy
     from spotipy.oauth2 import SpotifyOAuth
@@ -13,28 +14,21 @@ except ImportError:
     spotipy = None
     SpotifyOAuth = None
 
-# ── Page config ────────────────────────────────────────────
 st.set_page_config(
     page_title="Spotify Unwrapped",
     page_icon="🎵",
     layout="wide"
 )
 
-# ── Custom CSS ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 [data-testid="stAppViewContainer"] { background-color: #f9f9f7; }
 [data-testid="stMain"] { background-color: #f9f9f7; }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
-
-.block-container {
-    padding: 2.5rem 3rem 2rem 3rem;
-    max-width: 1200px;
-}
+.block-container { padding: 2.5rem 3rem 2rem 3rem; max-width: 1200px; }
 [data-testid="stSidebar"] { display: none; }
 [data-testid="collapsedControl"] { display: none; }
 [data-testid="stMetric"] {
@@ -93,7 +87,6 @@ h2, h3 { font-weight: 600 !important; color: #1a1a1a !important; letter-spacing:
 </style>
 """, unsafe_allow_html=True)
 
-# ── Chart theme ────────────────────────────────────────────
 CHART_THEME = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -106,103 +99,38 @@ GREEN_PALETTE = [
     "#a8dfc3", "#d4edda", "#0a5c2a", "#83c9a0"
 ]
 
-# ── Auth Manager ───────────────────────────────────────────
-def get_auth_manager(redirect_uri):
-    return SpotifyOAuth(
-        client_id=st.secrets["SPOTIPY_CLIENT_ID"],
-        client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"],
-        redirect_uri=redirect_uri,
-        scope="user-top-read user-read-recently-played user-read-private",
-        cache_handler=spotipy.cache_handler.MemoryCacheHandler(),
-        show_dialog=True
-    )
+KPOP = {
+    "enhypen","twice","illit","seventeen","txt","bts","blackpink","aespa",
+    "ive","stray kids","nct dream","nct 127","red velvet","exo","shinee",
+    "2pm","got7","monsta x","ateez","the boyz","newjeans","le sserafim",
+    "itzy","mamamoo","g-idle","artms","tripleS","cnco"
+}
+BOLLYWOOD = {
+    "arijit singh","shreya ghoshal","jubin nautiyal","armaan malik",
+    "neha kakkar","atif aslam","sonu nigam","pritam","vishal-shekhar",
+    "a.r. rahman","kushagra","runa laila","shashwat sachdev"
+}
+PUNJABI = {
+    "diljit dosanjh","ap dhillon","sidhu moosewala","karan aujla",
+    "shubh","babbal rai","amrit maan","jass manak","guru randhawa",
+    "b praak","jasmine sandlas","talwiinder","sufr"
+}
 
-# ── Data fetching ──────────────────────────────────────────
-@st.cache_data(show_spinner=False)
-def fetch_top_tracks(access_token):
-    sp = spotipy.Spotify(auth=access_token)
-    results = sp.current_user_top_tracks(limit=50, time_range="medium_term")
-    rows = []
-    for track in results["items"]:
-        rows.append({
-            "track_name":     track["name"],
-            "track_id":       track["id"],
-            "primary_artist": track["artists"][0]["name"],
-            "all_artists":    ", ".join([a["name"] for a in track["artists"]]),
-            "album_name":     track["album"]["name"],
-            "album_type":     track["album"]["album_type"],
-            "release_date":   track["album"]["release_date"],
-            "duration_mins":  round(track["duration_ms"] / 60000, 2),
-            "explicit":       track["explicit"],
-            "album_art_url":  track["album"]["images"][0]["url"],
-            "spotify_url":    track["external_urls"]["spotify"],
-        })
-    df = pd.DataFrame(rows)
-    df["release_year"] = pd.to_datetime(df["release_date"], format="mixed", dayfirst=False).dt.year
-    return df
+def infer_genre(artist):
+    a = artist.lower().strip()
+    if a in KPOP: return "K-Pop"
+    if a in BOLLYWOOD: return "Bollywood"
+    if a in PUNJABI: return "Punjabi"
+    return "Pop"
 
-@st.cache_data(show_spinner=False)
-def fetch_genres(track_data_hash, primary_artists_tuple):
-    unique_artists = list(primary_artists_tuple)
-    artist_genres = {}
-    headers = {
-        "User-Agent": "SpotifyUnwrapped/1.0.0 (github.com/pufff22/Spotify-Unwrapped)"
-    }
-    for name in unique_artists:
-        url = f"https://musicbrainz.org/ws/2/artist/?query=artist:{requests.utils.quote(name)}&fmt=json"
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-            data = response.json()
-            artists = data.get("artists", [])
-            if artists:
-                tags = artists[0].get("tags", [])
-                sorted_tags = sorted(tags, key=lambda x: x.get("count", 0), reverse=True)
-                artist_genres[name] = [t["name"] for t in sorted_tags]
-            else:
-                artist_genres[name] = []
-            time.sleep(0.5)
-        except:
-            artist_genres[name] = []
-
-    genre_map = {
-        "K-Pop":     ["k-pop", "korean", "kpop", "k pop"],
-        "Punjabi":   ["punjabi", "bhangra", "desi"],
-        "Bollywood": ["bollywood", "filmi", "hindi", "indian"],
-        "Pop":       ["pop", "dance-pop", "synth-pop", "boy band", "girl group"],
-        "Hip-Hop":   ["hip hop", "rap", "trap", "drill"],
-        "Rock":      ["rock", "metal", "grunge", "alternative rock"],
-        "R&B":       ["r&b", "soul", "funk"],
-        "Indie":     ["indie", "folk", "singer-songwriter"],
-    }
-
-    def classify(artist_name):
-        genres = artist_genres.get(artist_name, [])
-        genres_lower = [g.lower() for g in genres]
-        for bucket, keywords in genre_map.items():
-            for keyword in keywords:
-                if any(keyword in g for g in genres_lower):
-                    return bucket
-        return "Other"
-
-    return {artist: classify(artist) for artist in unique_artists}
-
-# ── Parse StreamingHistory JSON → DataFrame ────────────────
 @st.cache_data(show_spinner=False)
 def parse_streaming_history(raw_bytes):
-    """
-    Accepts Spotify's StreamingHistory*.json (array of objects with
-    'artistName', 'trackName', 'msPlayed', 'endTime') and returns a
-    DataFrame shaped like tracks_clean.csv so show_dashboard() works
-    unchanged.
-    """
-    import json, hashlib
     data = json.loads(raw_bytes)
     if not isinstance(data, list) or len(data) == 0:
         return None, "File appears empty or in unexpected format."
 
     df_raw = pd.DataFrame(data)
 
-    # Normalise column names — Spotify has used two naming conventions
     col_map = {}
     for c in df_raw.columns:
         cl = c.lower()
@@ -212,86 +140,73 @@ def parse_streaming_history(raw_bytes):
             col_map[c] = "track_name"
         elif "msplayed" in cl or "ms_played" in cl:
             col_map[c] = "ms_played"
-        elif "endtime" in cl or "ts" == cl:
+        elif "endtime" in cl or cl == "ts":
             col_map[c] = "end_time"
+
     df_raw = df_raw.rename(columns=col_map)
 
     needed = {"primary_artist", "track_name", "ms_played"}
     missing = needed - set(df_raw.columns)
     if missing:
-        return None, f"Could not find columns: {missing}. Make sure you uploaded StreamingHistory*.json."
+        return None, f"Could not find columns: {missing}. Make sure you uploaded a StreamingHistory*.json file."
 
-    # Drop skipped tracks (< 30 s)
     df_raw = df_raw[df_raw["ms_played"] >= 30_000].copy()
     if df_raw.empty:
-        return None, "No tracks with >30 s play time found."
+        return None, "No tracks with more than 30 seconds of play time found."
 
     df_raw["primary_artist"] = df_raw["primary_artist"].fillna("Unknown")
-    df_raw["track_name"]     = df_raw["track_name"].fillna("Unknown")
+    df_raw["track_name"] = df_raw["track_name"].fillna("Unknown")
 
-    # Aggregate: sum play time per track+artist, keep top 50
     df_agg = (
         df_raw.groupby(["track_name", "primary_artist"], as_index=False)
-              .agg(ms_total=("ms_played", "sum"), play_count=("ms_played", "count"))
-              .sort_values("ms_total", ascending=False)
+              .agg(
+                  play_count=("ms_played", "count"),
+                  ms_total=("ms_played", "sum")
+              )
+              .sort_values("play_count", ascending=False)
               .head(50)
               .reset_index(drop=True)
     )
 
-    df_agg["duration_mins"] = round(df_agg["ms_total"] / 60_000, 2)
+    single_play = (
+        df_raw.groupby(["track_name", "primary_artist"])["ms_played"]
+              .median()
+              .reset_index()
+              .rename(columns={"ms_played": "ms_single"})
+    )
+    df_agg = df_agg.merge(single_play, on=["track_name", "primary_artist"], how="left")
+    df_agg["duration_mins"] = round(df_agg["ms_single"] / 60_000, 2)
 
-    # Parse year from end_time if available
     if "end_time" in df_raw.columns:
-        time_map = df_raw.groupby(["track_name","primary_artist"])["end_time"].max()
-        df_agg["end_time"] = df_agg.set_index(["track_name","primary_artist"]).index.map(time_map).values
-        df_agg["release_year"] = pd.to_datetime(df_agg["end_time"], errors="coerce").dt.year.fillna(2024).astype(int)
+        first_played = (
+            df_raw.groupby(["track_name", "primary_artist"])["end_time"]
+                  .min()
+                  .reset_index()
+                  .rename(columns={"end_time": "first_played"})
+        )
+        df_agg = df_agg.merge(first_played, on=["track_name", "primary_artist"], how="left")
+        df_agg["release_year"] = (
+            pd.to_datetime(df_agg["first_played"], errors="coerce")
+              .dt.year.fillna(2023).astype(int)
+        )
     else:
-        df_agg["release_year"] = 2024
+        df_agg["release_year"] = 2023
 
-    # Stub columns expected by show_dashboard
-    df_agg["track_id"]      = df_agg["track_name"].apply(lambda x: hashlib.md5(x.encode()).hexdigest()[:22])
-    df_agg["all_artists"]   = df_agg["primary_artist"]
-    df_agg["album_name"]    = "Unknown Album"
-    df_agg["album_type"]    = "album"
-    df_agg["release_date"]  = df_agg["release_year"].astype(str) + "-01-01"
-    df_agg["explicit"]      = False
+    df_agg["track_id"] = df_agg["track_name"].apply(
+        lambda x: hashlib.md5(x.encode()).hexdigest()[:22]
+    )
+    df_agg["all_artists"] = df_agg["primary_artist"]
+    df_agg["album_name"] = "Unknown Album"
+    df_agg["album_type"] = "album"
+    df_agg["release_date"] = df_agg["release_year"].astype(str) + "-01-01"
+    df_agg["explicit"] = False
     df_agg["album_art_url"] = ""
-    df_agg["spotify_url"]   = ""
-    df_agg["duration_bucket"] = df_agg["duration_mins"].apply(
-        lambda m: "Short" if m < 2.5 else ("Long" if m > 4 else "Standard"))
-
-    # Genre classification from artist name heuristics (no API needed)
-    kpop_artists = {
-        "enhypen","twice","illit","seventeen","txt","bts","blackpink","aespa",
-        "ive","stray kids","nct dream","nct 127","red velvet","exo","shinee",
-        "2pm","got7","monsta x","ateez","the boyz","cravity","treasure",
-        "newjeans","le sserafim","itzy","loona","mamamoo","g-idle","gfriend",
-        "artms","cnco","tripleS"
-    }
-    bollywood_artists = {
-        "arijit singh","shreya ghoshal","jubin nautiyal","armaan malik",
-        "neha kakkar","atif aslam","sonu nigam","kumar sanu","udit narayan",
-        "pritam","vishal-shekhar","a.r. rahman","shankar-ehsaan-loy"
-    }
-    punjabi_artists = {
-        "diljit dosanjh","ap dhillon","sidhu moosewala","karan aujla",
-        "shubh","babbal rai","amrit maan","jass manak","guru randhawa",
-        "b praak","jasmine sandlas","talwiinder","sufr"
-    }
-
-    def infer_genre(artist):
-        a = artist.lower().strip()
-        if a in kpop_artists: return "K-Pop"
-        if a in bollywood_artists: return "Bollywood"
-        if a in punjabi_artists: return "Punjabi"
-        return "Pop"
-
+    df_agg["spotify_url"] = ""
     df_agg["genre_bucket"] = df_agg["primary_artist"].apply(infer_genre)
 
     return df_agg, None
 
 
-# ── Upload landing page ────────────────────────────────────
 def show_upload_landing():
     st.markdown("""
         <div style='max-width:560px; margin:5rem auto 0; text-align:center;'>
@@ -317,31 +232,20 @@ def show_upload_landing():
         uploaded = st.file_uploader(
             "Drop your StreamingHistory.json here",
             type=["json"],
-            help="From Spotify: Account → Privacy → Download your data → StreamingHistory*.json",
             label_visibility="collapsed"
         )
         st.markdown("""
             <div style='background:#f9f9f7; border:1px solid #eeeeee; border-radius:12px;
             padding:1rem 1.2rem; margin-top:0.8rem; font-size:12px; color:#555; line-height:1.8;'>
                 <b style='color:#1a1a1a;'>How to get your StreamingHistory.json</b><br><br>
-                <b>💻 On laptop / desktop:</b><br>
                 1. Go to <a href='https://www.spotify.com/account/privacy/' target='_blank'
-                style='color:#1DB954;'>www.spotify.com/account/privacy</a> and log in
-                &nbsp;<span style='color:#aaa'>(note: <code>open.spotify.com</code> won't work — must be <code>www.spotify.com</code>)</span><br>
-                2. Scroll down to <b>"Download your data"</b><br>
+                style='color:#1DB954;'>www.spotify.com/account/privacy</a> and log in<br>
+                2. Scroll to <b>"Download your data"</b><br>
                 3. Tick <b>"Extended streaming history"</b> → click <b>Request data</b><br>
-                4. Spotify emails you a confirmation link — click it<br>
-                5. You'll get a second email with a download link (usually within a few hours)<br>
-                6. Download the zip → unzip → upload any <code>StreamingHistory_music_*.json</code> file here<br><br>
-                <b>📱 On phone:</b><br>
-                1. Open Safari or Chrome (not the Spotify app) and go to
-                <a href='https://www.spotify.com/account/privacy/' target='_blank'
-                style='color:#1DB954;'>www.spotify.com/account/privacy</a><br>
-                2. Log in with your Spotify credentials<br>
-                3. Follow steps 2–6 above — the download link comes to your email<br>
-                4. Open the email, download and unzip, then upload the JSON here<br><br>
-                <span style='color:#aaa;'>⏱ Usually arrives within a few hours. The zip will contain files named
-                <code>StreamingHistory_music_0.json</code>, <code>_1.json</code> etc — upload any one of them.</span>
+                4. Spotify emails you a download link (usually within a few hours)<br>
+                5. Download the zip → unzip → upload any <code>StreamingHistory_music_*.json</code> file here<br><br>
+                <span style='color:#aaa;'>The zip will contain files named
+                <code>StreamingHistory_music_0.json</code>, <code>_1.json</code> etc — upload any one.</span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -349,23 +253,20 @@ def show_upload_landing():
         st.divider()
         st.markdown("<p style='color:#aaa; font-size:12px; text-align:center;'>or</p>", unsafe_allow_html=True)
 
-        if st.button("👀  View demo with Arushi's data", use_container_width=True):
+        if st.button("View demo with Arushi's data", use_container_width=True):
             st.session_state["use_demo"] = True
             st.rerun()
 
     return uploaded
 
 
-# ── Main dashboard ─────────────────────────────────────────
 def show_dashboard(df, user_name):
-
-    # ── Upload-another / back to demo banner ──────────────────
     is_demo = st.session_state.get("use_demo", False)
     banner_msg = (
-        "👀 You're viewing the demo with Arushi's data. "
+        "You're viewing the demo with Arushi's data. "
         "Upload your own <code>StreamingHistory.json</code> to see your report."
         if is_demo else
-        f"✅ Showing your personal Spotify report. "
+        "Showing your personal Spotify report. "
         "Click <b>Start over</b> to analyse a different file."
     )
     col_b1, col_b2 = st.columns([5, 1])
@@ -376,14 +277,13 @@ def show_dashboard(df, user_name):
             unsafe_allow_html=True
         )
     with col_b2:
-        if st.button("↩ Start over", use_container_width=True):
+        if st.button("Start over", use_container_width=True):
             for k in ["use_demo", "uploaded_df", "uploaded_name"]:
                 st.session_state.pop(k, None)
             st.rerun()
 
     st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
 
-    # Header
     col_hero, col_stats = st.columns([3, 1])
     with col_hero:
         st.markdown("""
@@ -415,7 +315,6 @@ def show_dashboard(df, user_name):
 
     st.divider()
 
-    # Metric cards
     top_artist = df["primary_artist"].value_counts().index[0]
     top_artist_count = df["primary_artist"].value_counts().iloc[0]
     avg_duration = round(df["duration_mins"].mean(), 2)
@@ -429,16 +328,14 @@ def show_dashboard(df, user_name):
     with col2:
         st.metric("Unique Artists", total_artists, "across all 50 tracks")
     with col3:
-        st.metric("Avg Song Length", f"{avg_duration} mins", "you like it short")
+        st.metric("Avg Song Length", f"{avg_duration} mins", "per track")
     with col4:
         st.metric("Year Range", f"{oldest_year} – {newest_year}", "your musical timeline")
 
     st.divider()
 
-    # Tabs
     tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Taste DNA", "Listening DNA", "Genre Evolution"])
 
-    # ── Tab 1: Overview ────────────────────────────────────
     with tab1:
         col_a, col_b = st.columns(2)
         with col_a:
@@ -446,7 +343,7 @@ def show_dashboard(df, user_name):
             artist_counts = df["primary_artist"].value_counts().reset_index()
             artist_counts.columns = ["artist", "track_count"]
             fig1 = px.bar(artist_counts, x="track_count", y="artist",
-                orientation="h", labels={"track_count": "Tracks", "artist": ""},
+                orientation="h", labels={"track_count": "Play Count", "artist": ""},
                 color="track_count", color_continuous_scale=["#d4edda", "#1DB954"])
             fig1.update_layout(**CHART_THEME, coloraxis_showscale=False,
                 yaxis={"categoryorder": "total ascending"}, height=480,
@@ -455,11 +352,11 @@ def show_dashboard(df, user_name):
             st.plotly_chart(fig1, use_container_width=True)
 
         with col_b:
-            st.markdown("#### When Was Your Music Made?")
+            st.markdown("#### When Did You Listen?")
             year_counts = df["release_year"].value_counts().sort_index().reset_index()
             year_counts.columns = ["year", "track_count"]
             fig2 = px.bar(year_counts, x="year", y="track_count",
-                labels={"track_count": "Tracks", "year": "Release Year"},
+                labels={"track_count": "Tracks", "year": "Year"},
                 color="track_count", color_continuous_scale=["#d4edda", "#1DB954"])
             fig2.update_layout(**CHART_THEME, coloraxis_showscale=False, height=480,
                 xaxis=dict(gridcolor="#f0f0f0", tickmode="linear"),
@@ -476,7 +373,6 @@ def show_dashboard(df, user_name):
         fig3.update_traces(marker_line_width=0)
         st.plotly_chart(fig3, use_container_width=True)
 
-    # ── Tab 2: Taste DNA ───────────────────────────────────
     with tab2:
         def get_era(year):
             if year < 1980: return "Classic"
@@ -508,7 +404,7 @@ def show_dashboard(df, user_name):
             ac2.columns = ["artist", "count"]
             fig_a = px.bar(ac2, x="count", y="artist", orientation="h",
                 color="count", color_continuous_scale=["#d4edda", "#1DB954"],
-                labels={"count": "Tracks", "artist": ""})
+                labels={"count": "Play Count", "artist": ""})
             fig_a.update_layout(**CHART_THEME, coloraxis_showscale=False,
                 yaxis={"categoryorder": "total ascending"}, height=350)
             fig_a.update_traces(marker_line_width=0)
@@ -532,7 +428,7 @@ def show_dashboard(df, user_name):
             ec = int(df["explicit"].sum())
             cc = len(df) - ec
             fig_c = go.Figure(data=[go.Pie(labels=["Clean","Explicit"],
-                values=[cc,ec], hole=0.65,
+                values=[cc, ec], hole=0.65,
                 marker_colors=["#1DB954","#d4edda"], textinfo="percent+label")])
             fig_c.update_layout(**CHART_THEME, height=300, showlegend=False,
                 annotations=[dict(text=f"{cc}/50<br>Clean", x=0.5, y=0.5,
@@ -560,7 +456,6 @@ def show_dashboard(df, user_name):
             fig_e.update_traces(marker_line_width=0)
             st.plotly_chart(fig_e, use_container_width=True)
 
-    # ── Tab 3: Listening DNA ───────────────────────────────
     with tab3:
         freshness = round((df["release_year"] >= 2023).sum() / len(df) * 100, 1)
         loyalty   = round((df["primary_artist"].value_counts().iloc[0] / len(df)) * 100, 1)
@@ -574,8 +469,8 @@ def show_dashboard(df, user_name):
         dim_closed = dimensions + [dimensions[0]]
         sc_closed  = scores + [scores[0]]
 
-        score_dict  = dict(zip(dimensions, scores))
-        dominant    = max(score_dict, key=score_dict.get)
+        score_dict = dict(zip(dimensions, scores))
+        dominant   = max(score_dict, key=score_dict.get)
         personality_map = {
             "Freshness": "The Trendsetter",
             "Loyalty":   "The Devoted Fan",
@@ -646,10 +541,9 @@ def show_dashboard(df, user_name):
                 </div>
             """, unsafe_allow_html=True)
 
-    # ── Tab 4: Genre Evolution ─────────────────────────────
     with tab4:
         if "genre_bucket" not in df.columns:
-            st.info("Genre data is loading — please wait a moment and refresh.")
+            st.info("Genre data not available.")
         else:
             top_genre = df["genre_bucket"].value_counts().index[0]
             top_genre_pct = round(
@@ -704,9 +598,8 @@ def show_dashboard(df, user_name):
                 fig_g2.update_traces(marker_line_width=0)
                 st.plotly_chart(fig_g2, use_container_width=True)
 
-# ── App flow ───────────────────────────────────────────────
+
 def main():
-    # ── Priority 1: already have uploaded data in session ──
     if "uploaded_df" in st.session_state:
         show_dashboard(
             st.session_state["uploaded_df"],
@@ -714,27 +607,14 @@ def main():
         )
         return
 
-    # ── Priority 2: demo mode chosen ──────────────────────
     if st.session_state.get("use_demo"):
-        df = pd.read_csv("tracks_clean.csv")
-        if "genre_bucket" not in df.columns:
-            df["genre_bucket"] = df["primary_artist"].apply(
-                lambda a: "K-Pop" if a.upper() in {
-                    "ENHYPEN","TWICE","ILLIT","SEVENTEEN","BTS","BLACKPINK",
-                    "AESPA","IVE","ARTMS","CNCO"
-                } else (
-                    "Punjabi" if a in {
-                        "Karan Aujla","Guru Randhawa","Jasmine Sandlas","Talwiinder","sufr"
-                    } else (
-                        "Bollywood" if a in {"Pritam","Kushagra","Runa Laila"}
-                        else "Pop"
-                    )
-                )
-            )
+        df = pd.read_csv("tracks_with_genres.csv")
+        df["release_year"] = pd.to_datetime(
+            df["release_date"], format="mixed", dayfirst=False
+        ).dt.year
         show_dashboard(df, "Arushi")
         return
 
-    # ── Priority 3: show upload landing ───────────────────
     uploaded = show_upload_landing()
 
     if uploaded is not None:
@@ -743,16 +623,13 @@ def main():
         if err:
             st.error(f"Could not parse file: {err}")
             return
-        # Extract first name from filename e.g. "StreamingHistory_music_0.json"
-        raw_name = uploaded.name.replace("StreamingHistory","").replace(".json","").strip("_- ")
-        user_name = raw_name if raw_name and not raw_name[0].isdigit() else "Your"
 
-        # Ask for name
-        col1, col2, col3 = st.columns([1,2,1])
+        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            st.success(f"Found {len(df)} top tracks! Enter your name to generate your report.")
             entered = st.text_input("What's your first name?", placeholder="e.g. Priya")
-            if st.button("Generate my report →", use_container_width=True):
-                st.session_state["uploaded_df"]   = df
+            if st.button("Generate my report", use_container_width=True):
+                st.session_state["uploaded_df"] = df
                 st.session_state["uploaded_name"] = entered.strip() or "Your"
                 st.rerun()
 
